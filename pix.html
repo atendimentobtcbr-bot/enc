@@ -361,7 +361,7 @@
         expiraBox.style.display = "none";
         return;
       }
-      expiraBox.style.display = "";
+      expiraBox.style.display = "block";
       const tick = () => {
         const remaining = expMs - Date.now();
         expiraBox.classList.remove("warning", "expired");

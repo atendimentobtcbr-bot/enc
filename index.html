@@ -309,7 +309,7 @@
       if (!expiresAtIso) { hideExpira(); return; }
       const expMs = new Date(expiresAtIso).getTime();
       if (!Number.isFinite(expMs)) { hideExpira(); return; }
-      expiraPreviewEl.style.display = "";
+      expiraPreviewEl.style.display = "block";
       const tick = () => {
         const remaining = expMs - Date.now();
         expiraPreviewEl.classList.remove("warning", "expired");
