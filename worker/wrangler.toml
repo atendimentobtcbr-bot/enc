@@ -1,0 +1,7 @@
+name = "enc"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "ENC_LINKS"
+id = "8cb4e6d0d46b4ce3a7863e3422a201b3"
