@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gerar link</title>
+  <title>Gerar link · enc admin</title>
   <style>
     body {
       font-family: Arial, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -201,9 +201,8 @@
   </div>
 
   <script>
-    const WORKER_BASE = "https://enc.atendimentobtcbr.workers.dev";
-    const WORKER_URL = WORKER_BASE + "/api/shorten";
-    const RESOLVE_URL = WORKER_BASE + "/api/resolve";
+    const WORKER_URL = "/api/shorten";
+    const RESOLVE_URL = "/api/resolve";
 
     const pixEl = document.getElementById("pix");
     const pedidoEl = document.getElementById("pedido");
@@ -479,29 +478,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

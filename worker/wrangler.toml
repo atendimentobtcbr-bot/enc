@@ -2,6 +2,12 @@ name = "enc"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
+[assets]
+directory = "./assets"
+binding = "ASSETS"
+not_found_handling = "none"
+run_worker_first = true
+
 [[kv_namespaces]]
 binding = "ENC_LINKS"
 id = "8cb4e6d0d46b4ce3a7863e3422a201b3"

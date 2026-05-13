@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
 ]);
 
-const VERSION = "enc-2026-05-13-v2-expiracao";
+const VERSION = "enc-2026-05-13-v3-auth";
 const CODE_LENGTH = 8;
 const SHORTENER_TIMEOUT_MS = 6000;
 const PIX_PAGE = "https://atendimentobtcbr-bot.github.io/enc/pix.html";
@@ -40,7 +40,12 @@ export default {
       if (url.pathname === "/version") {
         return json({ ok: true, version: VERSION, providers: [...VALID_PROVIDERS] }, 200, corsOrigin);
       }
+      if (url.pathname === "/admin" || url.pathname === "/admin/") {
+        if (!checkBasicAuth(request, env)) return unauthorizedResponse();
+        return env.ASSETS.fetch(new Request(new URL("/admin.html", request.url), request));
+      }
       if (url.pathname === "/api/shorten") {
+        if (!checkBasicAuth(request, env)) return unauthorizedResponse();
         return await handleShorten(request, env, url, corsOrigin);
       }
       if (url.pathname === "/api/resolve") {
@@ -221,6 +226,36 @@ async function handleRedirect(url, env) {
   if (!pix) return new Response("Link inválido", { status: 500 });
 
   return Response.redirect(buildPixTargetUrl(pix, pedido), 302);
+}
+
+// ---------- Basic Auth ----------
+
+function checkBasicAuth(request, env) {
+  if (!env?.ADMIN_USER || !env?.ADMIN_PASS) return false;
+  const header = request.headers.get("Authorization") || "";
+  if (!header.startsWith("Basic ")) return false;
+  let decoded;
+  try {
+    decoded = atob(header.slice(6).trim());
+  } catch {
+    return false;
+  }
+  const idx = decoded.indexOf(":");
+  if (idx < 0) return false;
+  const user = decoded.slice(0, idx);
+  const pass = decoded.slice(idx + 1);
+  return user === env.ADMIN_USER && pass === env.ADMIN_PASS;
+}
+
+function unauthorizedResponse() {
+  return new Response("Acesso restrito", {
+    status: 401,
+    headers: {
+      "WWW-Authenticate": 'Basic realm="enc-admin", charset="UTF-8"',
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 // ---------- Calendário Pix BCB ----------
