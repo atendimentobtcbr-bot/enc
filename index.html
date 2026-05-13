@@ -101,6 +101,38 @@
       font-weight: 600;
     }
     .valor-preview.empty small { color: #c2410c; }
+    .expira-preview {
+      margin-top: 8px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      color: #4c1d95;
+      font-weight: 700;
+      font-size: 14px;
+      display: none;
+    }
+    .expira-preview small {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #6d28d9;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .expira-preview.warning {
+      background: #fffbeb;
+      border-color: #fcd34d;
+      color: #92400e;
+    }
+    .expira-preview.warning small { color: #b45309; }
+    .expira-preview.expired {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #991b1b;
+    }
+    .expira-preview.expired small { color: #b91c1c; }
   </style>
 </head>
 <body>
@@ -113,6 +145,11 @@
     <div id="valorPreview" class="valor-preview">
       <small>Valor detectado</small>
       <span id="valorPreviewTxt">—</span>
+    </div>
+
+    <div id="expiraPreview" class="expira-preview">
+      <small id="expiraPreviewLabel">Expira em</small>
+      <span id="expiraPreviewTxt">—</span>
     </div>
 
     <label for="pedido">Número do pedido (opcional):</label>
@@ -173,6 +210,9 @@
     const linkEl = document.getElementById("link");
     const valorPreviewEl = document.getElementById("valorPreview");
     const valorPreviewTxt = document.getElementById("valorPreviewTxt");
+    const expiraPreviewEl = document.getElementById("expiraPreview");
+    const expiraPreviewLabel = document.getElementById("expiraPreviewLabel");
+    const expiraPreviewTxt = document.getElementById("expiraPreviewTxt");
 
     const internalUrlEl = document.getElementById("internalUrl");
     const targetUrlEl = document.getElementById("targetUrl");
@@ -242,14 +282,55 @@
     }
 
     let valorRequestId = 0;
+    let expiraTimer = null;
     function showValor(text, kind) {
       valorPreviewTxt.textContent = text;
       valorPreviewEl.classList.toggle("empty", kind === "empty");
       valorPreviewEl.style.display = "";
     }
+    function hideExpira() {
+      if (expiraTimer) { clearInterval(expiraTimer); expiraTimer = null; }
+      expiraPreviewEl.style.display = "none";
+      expiraPreviewEl.classList.remove("warning", "expired");
+    }
+    function formatRemainingPreview(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (d > 0) return `${d}d ${h}h ${m}m`;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${sec}s`;
+      return `${sec}s`;
+    }
+    function showExpira(expiresAtIso) {
+      if (expiraTimer) { clearInterval(expiraTimer); expiraTimer = null; }
+      if (!expiresAtIso) { hideExpira(); return; }
+      const expMs = new Date(expiresAtIso).getTime();
+      if (!Number.isFinite(expMs)) { hideExpira(); return; }
+      expiraPreviewEl.style.display = "";
+      const tick = () => {
+        const remaining = expMs - Date.now();
+        expiraPreviewEl.classList.remove("warning", "expired");
+        if (remaining <= 0) {
+          expiraPreviewLabel.textContent = "Cobrança expirada em";
+          expiraPreviewTxt.textContent = new Date(expMs).toLocaleString("pt-BR");
+          expiraPreviewEl.classList.add("expired");
+          if (expiraTimer) { clearInterval(expiraTimer); expiraTimer = null; }
+          return;
+        }
+        if (remaining < 5 * 60 * 1000) expiraPreviewEl.classList.add("warning");
+        expiraPreviewLabel.textContent = "Expira em";
+        expiraPreviewTxt.textContent = formatRemainingPreview(remaining);
+      };
+      tick();
+      expiraTimer = setInterval(tick, 1000);
+    }
     async function updateValorPreview() {
       const pix = normalizePix(pixEl.value);
       const myId = ++valorRequestId;
+      hideExpira();
 
       if (!pix) {
         valorPreviewEl.style.display = "none";
@@ -258,18 +339,17 @@
       }
 
       const valor = parseEmvAmount(pix);
-      if (valor !== null && valor > 0) {
-        showValor(formatBRL(valor), "ok");
-        return;
-      }
+      const valorEstatico = (valor !== null && valor > 0);
+      if (valorEstatico) showValor(formatBRL(valor), "ok");
 
       const dynUrl = parseDynamicUrl(pix);
       if (!dynUrl) {
-        showValor("Pix sem valor fixo (o cliente escolhe)", "empty");
+        if (!valorEstatico) showValor("Pix sem valor fixo (o cliente escolhe)", "empty");
         return;
       }
 
-      showValor("Buscando valor...", "empty");
+      if (!valorEstatico) showValor("Buscando valor...", "empty");
+
       try {
         const resp = await fetch(RESOLVE_URL, {
           method: "POST",
@@ -278,14 +358,20 @@
         });
         const data = await resp.json();
         if (myId !== valorRequestId) return;
-        if (data?.ok && Number.isFinite(data.amount) && data.amount > 0) {
-          showValor(formatBRL(data.amount), "ok");
-        } else {
+
+        if (data?.ok) {
+          if (!valorEstatico && Number.isFinite(data.amount) && data.amount > 0) {
+            showValor(formatBRL(data.amount), "ok");
+          } else if (!valorEstatico) {
+            showValor("Pix dinâmico (valor não disponível)", "empty");
+          }
+          showExpira(data.expiresAt);
+        } else if (!valorEstatico) {
           showValor("Pix dinâmico (valor não disponível)", "empty");
         }
       } catch {
         if (myId !== valorRequestId) return;
-        showValor("Pix dinâmico (não consegui consultar)", "empty");
+        if (!valorEstatico) showValor("Pix dinâmico (não consegui consultar)", "empty");
       }
     }
     function getSelectedProvider() {

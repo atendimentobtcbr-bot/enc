@@ -97,6 +97,28 @@
       text-transform: uppercase;
       margin-bottom: 2px;
     }
+    .expira{
+      margin-top: 10px;
+      text-align:center;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+      position: relative; z-index: 1;
+      display:none;
+    }
+    .expira .label{
+      display:block;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 2px;
+      font-weight: 700;
+    }
+    .expira.warning{ color: #fde68a; }
+    .expira.warning .label{ color: #fcd34d; }
+    .expira.expired{ color: #fca5a5; }
+    .expira.expired .label{ color: #f87171; }
     textarea{
       width:100%; margin-top: 12px;
       border-radius: 14px;
@@ -171,6 +193,11 @@
         <span id="valorTxt">—</span>
       </div>
 
+      <div class="expira" id="expiraBox">
+        <span class="label" id="expiraLabel">Expira em</span>
+        <span id="expiraTxt">—</span>
+      </div>
+
       <section class="qrBox" id="qrBox">
         <div class="sub">Carregando QR Code…</div>
       </section>
@@ -200,6 +227,9 @@
     const pedidoTxt = document.getElementById("pedidoTxt");
     const valorBox = document.getElementById("valorBox");
     const valorTxt = document.getElementById("valorTxt");
+    const expiraBox = document.getElementById("expiraBox");
+    const expiraLabel = document.getElementById("expiraLabel");
+    const expiraTxt = document.getElementById("expiraTxt");
 
     function setMsg(text, kind) {
       msgEl.textContent = text || "";
@@ -305,20 +335,71 @@
     pixEl.value = pix;
     renderQr(pix);
 
+    let countdownTimer = null;
+    function stopCountdown() {
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    }
+    function formatRemaining(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (d > 0) return `${d}d ${h}h ${m}m`;
+      if (h > 0) return `${h}h ${m}m ${sec}s`;
+      if (m > 0) return `${m}m ${sec}s`;
+      return `${sec}s`;
+    }
+    function renderExpira(expiresAtIso) {
+      stopCountdown();
+      if (!expiresAtIso) {
+        expiraBox.style.display = "none";
+        return;
+      }
+      const expMs = new Date(expiresAtIso).getTime();
+      if (!Number.isFinite(expMs)) {
+        expiraBox.style.display = "none";
+        return;
+      }
+      expiraBox.style.display = "";
+      const tick = () => {
+        const remaining = expMs - Date.now();
+        expiraBox.classList.remove("warning", "expired");
+        if (remaining <= 0) {
+          expiraLabel.textContent = "Cobrança expirada";
+          expiraTxt.textContent = new Date(expMs).toLocaleString("pt-BR");
+          expiraBox.classList.add("expired");
+          stopCountdown();
+          return;
+        }
+        if (remaining < 5 * 60 * 1000) expiraBox.classList.add("warning");
+        expiraLabel.textContent = "Expira em";
+        expiraTxt.textContent = formatRemaining(remaining);
+      };
+      tick();
+      countdownTimer = setInterval(tick, 1000);
+    }
+
     async function showValorFromPix() {
       const valor = parseEmvAmount(pix);
-      if (valor !== null && valor > 0) {
+      const valorEstatico = (valor !== null && valor > 0);
+
+      if (valorEstatico) {
         valorTxt.textContent = formatBRL(valor);
         valorBox.style.display = "";
-        return;
       }
+
       const dynUrl = parseDynamicUrl(pix);
       if (!dynUrl) {
-        valorBox.style.display = "none";
+        if (!valorEstatico) valorBox.style.display = "none";
         return;
       }
-      valorTxt.textContent = "Buscando...";
-      valorBox.style.display = "";
+
+      if (!valorEstatico) {
+        valorTxt.textContent = "Buscando...";
+        valorBox.style.display = "";
+      }
+
       try {
         const resp = await fetch(RESOLVE_URL, {
           method: "POST",
@@ -326,13 +407,18 @@
           body: JSON.stringify({ url: dynUrl }),
         });
         const data = await resp.json();
-        if (data?.ok && Number.isFinite(data.amount) && data.amount > 0) {
-          valorTxt.textContent = formatBRL(data.amount);
-        } else {
+        if (data?.ok) {
+          if (!valorEstatico && Number.isFinite(data.amount) && data.amount > 0) {
+            valorTxt.textContent = formatBRL(data.amount);
+          } else if (!valorEstatico) {
+            valorBox.style.display = "none";
+          }
+          renderExpira(data.expiresAt);
+        } else if (!valorEstatico) {
           valorBox.style.display = "none";
         }
       } catch {
-        valorBox.style.display = "none";
+        if (!valorEstatico) valorBox.style.display = "none";
       }
     }
     showValorFromPix();

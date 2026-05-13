@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
 ]);
 
-const VERSION = "enc-2026-05-13-v1";
+const VERSION = "enc-2026-05-13-v2-expiracao";
 const CODE_LENGTH = 8;
 const SHORTENER_TIMEOUT_MS = 6000;
 const PIX_PAGE = "https://atendimentobtcbr-bot.github.io/enc/pix.html";
@@ -178,11 +178,16 @@ async function handleResolve(request, corsOrigin) {
       return json({ ok: false, error: "Valor não encontrado no payload do PSP" }, 200, corsOrigin);
     }
 
+    const { createdAt, expiresAt, kind } = parseCalendario(payload?.calendario);
+
     return json(
       {
         ok: true,
         amount,
         merchantName: payload?.devedor?.nome || payload?.merchantName || "",
+        createdAt,
+        expiresAt,
+        calendarKind: kind,
       },
       200,
       corsOrigin
@@ -216,6 +221,46 @@ async function handleRedirect(url, env) {
   if (!pix) return new Response("Link inválido", { status: 500 });
 
   return Response.redirect(buildPixTargetUrl(pix, pedido), 302);
+}
+
+// ---------- Calendário Pix BCB ----------
+// cob (cobrança imediata): { criacao: ISO, expiracao: <segundos> }
+// cobv (cobrança com vencimento): { dataDeVencimento: "YYYY-MM-DD", validadeAposVencimento?: <dias> }
+function parseCalendario(cal) {
+  if (!cal || typeof cal !== "object") {
+    return { createdAt: null, expiresAt: null, kind: null };
+  }
+
+  if (cal.dataDeVencimento) {
+    const base = new Date(cal.dataDeVencimento + "T23:59:59Z");
+    if (!Number.isFinite(base.getTime())) {
+      return { createdAt: null, expiresAt: null, kind: "cobv" };
+    }
+    const extraDays = Number.isFinite(parseInt(cal.validadeAposVencimento, 10))
+      ? parseInt(cal.validadeAposVencimento, 10)
+      : 0;
+    const expires = new Date(base.getTime() + extraDays * 86400_000);
+    return {
+      createdAt: cal.criacao || null,
+      expiresAt: expires.toISOString(),
+      kind: "cobv",
+    };
+  }
+
+  const expSec = parseInt(cal.expiracao, 10);
+  if (cal.criacao && Number.isFinite(expSec)) {
+    const created = new Date(cal.criacao);
+    if (!Number.isFinite(created.getTime())) {
+      return { createdAt: null, expiresAt: null, kind: "cob" };
+    }
+    return {
+      createdAt: created.toISOString(),
+      expiresAt: new Date(created.getTime() + expSec * 1000).toISOString(),
+      kind: "cob",
+    };
+  }
+
+  return { createdAt: cal.criacao || null, expiresAt: null, kind: null };
 }
 
 // ---------- CORS / JSON ----------
