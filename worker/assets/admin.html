@@ -157,10 +157,7 @@
 
     <label>Escolha o encurtador:</label>
     <div class="providers" id="providers">
-      <input type="radio" name="provider" id="p-isgd" value="is.gd" checked>
-      <label for="p-isgd">is.gd</label>
-
-      <input type="radio" name="provider" id="p-clcis" value="clc.is">
+      <input type="radio" name="provider" id="p-clcis" value="clc.is" checked>
       <label for="p-clcis">clc.is</label>
 
       <input type="radio" name="provider" id="p-spoome" value="spoo.me">
@@ -168,6 +165,9 @@
 
       <input type="radio" name="provider" id="p-urlfy" value="urlfy.org">
       <label for="p-urlfy">urlfy.org</label>
+
+      <input type="radio" name="provider" id="p-isgd" value="is.gd">
+      <label for="p-isgd">is.gd</label>
     </div>
 
     <div class="row">
@@ -375,7 +375,7 @@
     }
     function getSelectedProvider() {
       const checked = document.querySelector('input[name="provider"]:checked');
-      return checked ? checked.value : "is.gd";
+      return checked ? checked.value : "clc.is";
     }
     function setDetails({ internalUrl = "", targetUrl = "", provider = "", ok = null, error = "" }) {
       internalUrlEl.value = internalUrl || "-";
@@ -441,6 +441,18 @@
 
       linkEl.value = data.shortUrl || "";
       setButtonsEnabled(!!linkEl.value);
+
+      // Mesmo clique do "Gerar": ja abre a pagina e copia o link
+      // (equivale a clicar em Abrir + Copiar). Abrimos primeiro pra
+      // reduzir bloqueio de popup; a copia e best-effort.
+      if (linkEl.value) {
+        window.open(linkEl.value, "_blank", "noopener,noreferrer");
+        try {
+          await navigator.clipboard.writeText(linkEl.value);
+          copiarBtn.textContent = "Copiado!";
+          setTimeout(() => (copiarBtn.textContent = "Copiar link"), 1200);
+        } catch {}
+      }
 
       setDetails({
         internalUrl: data.internalUrl || "",
